@@ -1,0 +1,36 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "allowJs": false,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "baseUrl": ".",
+    "types": ["node", "electron-vite/node"],
+    "paths": {
+      "@sibot/shared": ["packages/shared/src/index.ts"],
+      "@sibot/config": ["packages/config/src/index.ts"],
+      "@sibot/game-detectors": ["packages/game-detectors/src/index.ts"],
+      "@sibot/game-profiles": ["packages/game-detectors/src/profiles.ts"],
+      "@sibot/event-engine": ["packages/event-engine/src/index.ts"],
+      "@sibot/speech": ["packages/speech/src/index.ts"],
+      "@sibot/core": ["packages/core/src/index.ts"],
+      "@renderer/*": ["apps/desktop/src/renderer/*"],
+      "@overlay/*": ["apps/desktop/src/overlay/*"]
+    }
+  },
+  "include": [
+    "electron.vite.config.ts",
+    "apps/**/*",
+    "packages/**/*"
+  ]
+}

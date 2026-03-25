@@ -1,0 +1,83 @@
+name: Release Windows Build
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "릴리즈 태그 예시: v0.1.0"
+        required: true
+        type: string
+      release_name:
+        description: "릴리즈 이름 예시: SIBOT v0.1.0"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build Windows installer
+        run: npm run package:win
+
+      - name: Resolve release metadata
+        id: meta
+        shell: pwsh
+        run: |
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $tag = "${{ inputs.release_tag }}"
+            $name = "${{ inputs.release_name }}"
+            if ([string]::IsNullOrWhiteSpace($name)) {
+              $name = "SIBOT $tag"
+            }
+          } else {
+            $tag = "${{ github.ref_name }}"
+            $name = "SIBOT $tag"
+          }
+
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "name=$name" >> $env:GITHUB_OUTPUT
+
+      - name: Create tag when manually dispatched
+        if: github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag "${{ steps.meta.outputs.tag }}" "${{ github.sha }}"
+          git push origin "${{ steps.meta.outputs.tag }}"
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: ${{ steps.meta.outputs.name }}
+          files: |
+            release/*.exe
+            release/*.blockmap
+            release/latest*.yml
+          generate_release_notes: true
+
