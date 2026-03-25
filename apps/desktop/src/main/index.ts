@@ -31,6 +31,7 @@ const overlayUrl = rendererUrl ? new URL("overlay.html", rendererUrl).toString()
 
 const createMainWindow = async () => {
   mainWindow = new BrowserWindow({
+    show: false,
     width: 1500,
     height: 980,
     minWidth: 1200,
@@ -53,6 +54,16 @@ const createMainWindow = async () => {
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
+
+  mainWindow.once("ready-to-show", () => {
+    mainWindow?.show();
+  });
+
+  setTimeout(() => {
+    if (mainWindow && !mainWindow.isVisible()) {
+      mainWindow.show();
+    }
+  }, 1800);
 
   mainWindow.webContents.on("did-finish-load", () => {
     if (runtime) {
@@ -179,6 +190,8 @@ const registerIpc = () => {
     return runtime?.runCommand(command) ?? null;
   });
   ipcMain.handle("sibot:check-for-updates", async () => updateManager?.check() ?? null);
+  ipcMain.handle("sibot:download-update", async () => updateManager?.downloadUpdate() ?? null);
+  ipcMain.handle("sibot:install-update", async () => updateManager?.installUpdate() ?? false);
   ipcMain.handle("sibot:open-external", async (_event, url: string) => {
     if (!url) {
       return false;

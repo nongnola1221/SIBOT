@@ -14,6 +14,8 @@ declare global {
       updateSettings(patch: Partial<UserSettings>): Promise<void>;
       command(command: RuntimeCommand): Promise<unknown>;
       checkForUpdates(): Promise<UpdateStatus | null>;
+      downloadUpdate(): Promise<UpdateStatus | null>;
+      installUpdate(): Promise<boolean>;
       openExternal(url: string): Promise<boolean>;
       listCaptureSources(): Promise<CaptureSourceInfo[]>;
       onSnapshot(handler: (snapshot: RuntimeSnapshot) => void): () => void;

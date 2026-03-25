@@ -21,6 +21,8 @@ const api = {
   command: (command: RuntimeCommand) =>
     ipcRenderer.invoke("sibot:command", command) as Promise<unknown>,
   checkForUpdates: () => ipcRenderer.invoke("sibot:check-for-updates") as Promise<UpdateStatus | null>,
+  downloadUpdate: () => ipcRenderer.invoke("sibot:download-update") as Promise<UpdateStatus | null>,
+  installUpdate: () => ipcRenderer.invoke("sibot:install-update") as Promise<boolean>,
   openExternal: (url: string) => ipcRenderer.invoke("sibot:open-external", url) as Promise<boolean>,
   listCaptureSources: async (): Promise<CaptureSourceInfo[]> => {
     const sources = await desktopCapturer.getSources({

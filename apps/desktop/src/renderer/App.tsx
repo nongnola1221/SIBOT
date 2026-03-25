@@ -6,6 +6,7 @@ import {
   SPEECH_STATUS_LABELS,
   formatClockTime,
   type RuntimeSnapshot,
+  type UpdateStatus,
   type UserSettings
 } from "@sibot/shared";
 import { OverlayPreview } from "./components/OverlayPreview";
@@ -206,9 +207,111 @@ const StatusGrid = ({ snapshot }: { snapshot: RuntimeSnapshot }) => {
   );
 };
 
+const formatBytes = (value?: number) => {
+  if (!value) {
+    return "0MB";
+  }
+
+  if (value >= 1024 * 1024 * 1024) {
+    return `${(value / (1024 * 1024 * 1024)).toFixed(2)}GB`;
+  }
+
+  if (value >= 1024 * 1024) {
+    return `${(value / (1024 * 1024)).toFixed(1)}MB`;
+  }
+
+  return `${Math.round(value / 1024)}KB`;
+};
+
+const RuntimeFallback = ({
+  bridgeAvailable,
+  connectionPhase,
+  connectionMessage,
+  updateStatus,
+  retryConnection,
+  checkForUpdates,
+  downloadUpdate,
+  installUpdate
+}: {
+  bridgeAvailable: boolean;
+  connectionPhase: string;
+  connectionMessage: string;
+  updateStatus: UpdateStatus | null;
+  retryConnection: () => Promise<RuntimeSnapshot | null>;
+  checkForUpdates: () => Promise<UpdateStatus | null>;
+  downloadUpdate: () => Promise<UpdateStatus | null>;
+  installUpdate: () => Promise<boolean>;
+}) => (
+  <div className="fatal-shell">
+    <div className="fatal-shell__card">
+      <p className="brand-block__eyebrow">STARTUP DIAGNOSTICS</p>
+      <h1>SIBOT 화면 연결 상태를 확인 중입니다.</h1>
+      <p className="field__description">{connectionMessage}</p>
+
+      <div className="detail-grid">
+        <div>
+          <span>브리지 상태</span>
+          <strong>{bridgeAvailable ? "연결됨" : "없음"}</strong>
+        </div>
+        <div>
+          <span>연결 단계</span>
+          <strong>{connectionPhase}</strong>
+        </div>
+        <div>
+          <span>업데이트 상태</span>
+          <strong>{updateStatus?.phase ?? "idle"}</strong>
+        </div>
+        <div>
+          <span>설치 준비</span>
+          <strong>{updateStatus?.latestVersion ?? "없음"}</strong>
+        </div>
+      </div>
+
+      <div className="button-row">
+        <button className="button button--primary" onClick={() => void retryConnection()} type="button">
+          다시 연결
+        </button>
+        <button className="button" onClick={() => void checkForUpdates()} type="button">
+          업데이트 확인
+        </button>
+        {updateStatus?.phase === "update-available" ? (
+          <button className="button" onClick={() => void downloadUpdate()} type="button">
+            업데이트 다운로드
+          </button>
+        ) : null}
+        {updateStatus?.phase === "downloaded" ? (
+          <button className="button" onClick={() => void installUpdate()} type="button">
+            설치 파일 실행
+          </button>
+        ) : null}
+      </div>
+
+      <div className="info-panel">
+        <p className="info-panel__primary">첫 실행 체크 포인트</p>
+        <p className="field__description">
+          앱 창이 비어 보이면 preload 브리지나 런타임 초기화가 늦은 경우가 많습니다.
+          위의 재연결 버튼으로 다시 붙고, 업데이트가 있으면 앱 안에서 바로 설치 파일을 받을 수 있습니다.
+        </p>
+      </div>
+    </div>
+  </div>
+);
+
 export const App = () => {
-  const { snapshot, updateStatus, sendCommand, updateSettings, checkForUpdates, openExternal } =
-    useSibotRuntime();
+  const {
+    bridgeAvailable,
+    connectionPhase,
+    connectionMessage,
+    snapshot,
+    updateStatus,
+    retryConnection,
+    sendCommand,
+    updateSettings,
+    checkForUpdates,
+    downloadUpdate,
+    installUpdate,
+    openExternal
+  } = useSibotRuntime();
   const liveVoice = useLiveVoice();
   const captureAnalysis = useCaptureAnalysis();
   const [activeTab, setActiveTab] = useState<TabId>("dashboard");
@@ -222,11 +325,51 @@ export const App = () => {
   );
 
   if (!snapshot) {
-    return <div className="loading-shell">SIBOT 런타임 연결 중...</div>;
+    return (
+      <RuntimeFallback
+        bridgeAvailable={bridgeAvailable}
+        checkForUpdates={checkForUpdates}
+        connectionMessage={connectionMessage}
+        connectionPhase={connectionPhase}
+        downloadUpdate={downloadUpdate}
+        installUpdate={installUpdate}
+        retryConnection={retryConnection}
+        updateStatus={updateStatus}
+      />
+    );
   }
 
   const settings = snapshot.settings;
   const obsOverlayUrl = `http://127.0.0.1:${settings.obsOverlayPort}/overlay`;
+  const showUpdateBanner = ["update-available", "downloading", "downloaded", "installing"].includes(
+    updateStatus?.phase ?? ""
+  );
+  const primaryUpdateAction =
+    updateStatus?.phase === "update-available"
+      ? {
+          label: "업데이트 다운로드",
+          disabled: false,
+          onClick: () => void downloadUpdate()
+        }
+      : updateStatus?.phase === "downloading"
+        ? {
+            label: `다운로드 중 ${updateStatus.downloadProgress ?? 0}%`,
+            disabled: true,
+            onClick: () => undefined
+          }
+        : updateStatus?.phase === "downloaded"
+          ? {
+              label: "지금 설치",
+              disabled: false,
+              onClick: () => void installUpdate()
+            }
+          : updateStatus?.phase === "installing"
+            ? {
+                label: "설치 파일 실행 중",
+                disabled: true,
+                onClick: () => undefined
+              }
+            : null;
   const setSetting = <K extends keyof UserSettings>(key: K, value: UserSettings[K]) => {
     void updateSettings({ [key]: value } as Pick<UserSettings, K>);
   };
@@ -320,6 +463,9 @@ export const App = () => {
           {updateStatus?.phase === "update-available" ? (
             <StatusPill tone="warning">업데이트 있음</StatusPill>
           ) : null}
+          {updateStatus?.phase === "downloaded" ? (
+            <StatusPill tone="accent">설치 준비</StatusPill>
+          ) : null}
         </div>
 
         <nav className="tab-nav">
@@ -377,6 +523,48 @@ export const App = () => {
         </header>
 
         <StatusGrid snapshot={snapshot} />
+
+        {showUpdateBanner ? (
+          <section className="update-banner">
+            <div>
+              <p className="brand-block__eyebrow">IN-APP UPDATE</p>
+              <h3>{updateStatus?.message ?? "새 업데이트가 준비되었습니다."}</h3>
+              <p className="field__description">
+                현재 {updateStatus?.currentVersion ?? "알 수 없음"}
+                {updateStatus?.latestVersion ? ` · 최신 ${updateStatus.latestVersion}` : ""}
+                {updateStatus?.phase === "downloading"
+                  ? ` · ${formatBytes(updateStatus.downloadedBytes)} / ${formatBytes(updateStatus.totalBytes)}`
+                  : ""}
+              </p>
+              {typeof updateStatus?.downloadProgress === "number" ? (
+                <div className="progress-bar">
+                  <span style={{ width: `${updateStatus.downloadProgress}%` }} />
+                </div>
+              ) : null}
+            </div>
+            <div className="hero-panel__actions">
+              {primaryUpdateAction ? (
+                <button
+                  className="button button--primary"
+                  disabled={primaryUpdateAction.disabled}
+                  onClick={primaryUpdateAction.onClick}
+                  type="button"
+                >
+                  {primaryUpdateAction.label}
+                </button>
+              ) : null}
+              {updateStatus?.releaseUrl ? (
+                <button
+                  className="button"
+                  onClick={() => void openExternal(updateStatus.releaseUrl ?? "")}
+                  type="button"
+                >
+                  릴리즈 보기
+                </button>
+              ) : null}
+            </div>
+          </section>
+        ) : null}
 
         {activeTab === "dashboard" ? (
           <div className="section-grid section-grid--dashboard">
@@ -500,16 +688,37 @@ export const App = () => {
                 <button className="button" onClick={() => void checkForUpdates()} type="button">
                   업데이트 확인
                 </button>
-                {updateStatus?.downloadUrl ? (
+                {primaryUpdateAction ? (
                   <button
                     className="button button--primary"
-                    onClick={() => void openExternal(updateStatus.downloadUrl ?? "")}
+                    disabled={primaryUpdateAction.disabled}
+                    onClick={primaryUpdateAction.onClick}
                     type="button"
                   >
-                    최신 exe 열기
+                    {primaryUpdateAction.label}
+                  </button>
+                ) : null}
+                {updateStatus?.releaseUrl ? (
+                  <button
+                    className="button"
+                    onClick={() => void openExternal(updateStatus.releaseUrl ?? "")}
+                    type="button"
+                  >
+                    릴리즈 페이지
                   </button>
                 ) : null}
               </div>
+              {typeof updateStatus?.downloadProgress === "number" ? (
+                <div className="progress-bar">
+                  <span style={{ width: `${updateStatus.downloadProgress}%` }} />
+                </div>
+              ) : null}
+              {updateStatus?.downloadedBytes ? (
+                <p className="muted">
+                  {formatBytes(updateStatus.downloadedBytes)}
+                  {updateStatus.totalBytes ? ` / ${formatBytes(updateStatus.totalBytes)}` : ""}
+                </p>
+              ) : null}
             </SectionCard>
 
             <SectionCard title="최근 발화" eyebrow="Last Utterances">

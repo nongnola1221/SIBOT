@@ -97,6 +97,9 @@ export interface UpdateStatus {
     | "checking"
     | "up-to-date"
     | "update-available"
+    | "downloading"
+    | "downloaded"
+    | "installing"
     | "disabled"
     | "error";
   currentVersion: string;
@@ -104,7 +107,12 @@ export interface UpdateStatus {
   checkedAt?: number;
   downloadUrl?: string;
   releaseUrl?: string;
+  installerPath?: string;
+  downloadProgress?: number;
+  downloadedBytes?: number;
+  totalBytes?: number;
   message?: string;
+  errorMessage?: string;
 }
 
 export interface GameDetection {
