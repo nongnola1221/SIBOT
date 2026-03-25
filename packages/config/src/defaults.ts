@@ -18,6 +18,7 @@ export const defaultSettings: UserSettings = {
   overlayFontScale: 1,
   overlayOpacity: 0.78,
   overlayShowNickname: true,
+  obsOverlayPort: 43115,
   ttsEnabled: false,
   ttsVolume: 0.8,
   ttsRate: 1,
@@ -30,6 +31,9 @@ export const defaultSettings: UserSettings = {
   backgroundNoiseSensitivity: 0.55,
   autoStartOnGameDetected: false,
   selectedGameProfile: "overwatch2",
+  captureSourceId: "",
+  captureAnalysisEnabled: false,
+  captureSampleIntervalMs: 700,
   eventCooldownMs: 9000,
   profanityMinimumIntervalMs: 22000,
   developerMode: true,
@@ -37,4 +41,3 @@ export const defaultSettings: UserSettings = {
   eventSensitivity: 0.55,
   priorityConflictMode: "highest"
 };
-

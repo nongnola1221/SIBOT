@@ -21,11 +21,11 @@ import {
 } from "@sibot/shared";
 import {
   MockSTTProvider,
-  MockTTSProvider,
   MockWakeWordProvider,
   type STTProvider,
   type TTSProvider,
-  type WakeWordProvider
+  type WakeWordProvider,
+  SystemTTSProvider
 } from "@sibot/speech";
 import { MockAnalysisEngine } from "../analysis/mockAnalyzer";
 import { ConversationMemory } from "./memory";
@@ -65,7 +65,7 @@ export class SibotRuntime {
 
   constructor(initialSettings: UserSettings, dependencies: RuntimeDependencies = {}) {
     this.detector = dependencies.detector ?? new GameDetectionService();
-    this.tts = dependencies.tts ?? new MockTTSProvider();
+    this.tts = dependencies.tts ?? new SystemTTSProvider();
     this.stt = dependencies.stt ?? new MockSTTProvider();
     this.wakeWord = dependencies.wakeWord ?? new MockWakeWordProvider();
     this.persistSettings = dependencies.persistSettings;
@@ -76,7 +76,7 @@ export class SibotRuntime {
   async initialize() {
     this.stt.setTranscriptHandler((transcript) => {
       if (transcript.final) {
-        void this.submitTextQuery(transcript.text);
+        void this.processTranscript(transcript.text);
       }
     });
 
@@ -180,6 +180,8 @@ export class SibotRuntime {
         return this.testUtterance(command.eventType);
       case "speech/simulate-wake-word":
         return this.onWakeWord(command.word ?? this.snapshot.settings.wakeWords[0]);
+      case "speech/process-transcript":
+        return this.processTranscript(command.text);
       case "speech/submit-query":
         return this.submitTextQuery(command.text);
       default:
@@ -261,13 +263,13 @@ export class SibotRuntime {
     return this.getSnapshot();
   }
 
-  async submitTextQuery(text: string) {
+  async submitTextQuery(text: string, options?: { skipGate?: boolean }) {
     const trimmed = text.trim();
     if (!trimmed) {
       return null;
     }
 
-    const canRespond = this.canAcceptSpeech(trimmed);
+    const canRespond = options?.skipGate ? true : this.canAcceptSpeech(trimmed);
     if (!canRespond) {
       this.log("debug", "speech", "Ignored query outside wake/listen window", { text: trimmed });
       return null;
@@ -313,6 +315,32 @@ export class SibotRuntime {
     });
     this.emitSnapshot();
     return turn;
+  }
+
+  async processTranscript(text: string) {
+    const trimmed = text.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    this.log("debug", "speech", "Transcript received", {
+      text: trimmed
+    });
+
+    const matchedWakeWord = this.matchWakeWord(trimmed);
+
+    if (matchedWakeWord) {
+      await this.onWakeWord(matchedWakeWord);
+
+      const remainder = this.stripWakeWord(trimmed, matchedWakeWord);
+      if (!remainder) {
+        return null;
+      }
+
+      return this.submitTextQuery(remainder, { skipGate: true });
+    }
+
+    return this.submitTextQuery(trimmed);
   }
 
   async injectMockEvent(eventType?: AnalysisEventType) {
@@ -452,7 +480,7 @@ export class SibotRuntime {
       recentUtterances: this.memory.getUtterances(),
       overlayStatus: this.snapshot.settings.overlayEnabled ? "visible" : "hidden",
       isOverlayVisible: this.snapshot.settings.overlayEnabled,
-      ttsStatus: this.snapshot.settings.ttsEnabled ? "mock-speaking" : "off"
+      ttsStatus: this.snapshot.settings.ttsEnabled ? "speaking" : "off"
     };
 
     if (this.snapshot.settings.ttsEnabled) {
@@ -587,6 +615,27 @@ export class SibotRuntime {
     );
   }
 
+  private matchWakeWord(text: string) {
+    if (!this.snapshot.settings.wakeWordEnabled) {
+      return null;
+    }
+
+    const normalized = text.toLowerCase().trim();
+
+    return (
+      this.snapshot.settings.wakeWords.find((word) =>
+        normalized.startsWith(word.toLowerCase())
+      ) ?? null
+    );
+  }
+
+  private stripWakeWord(text: string, wakeWord: string) {
+    return text
+      .slice(wakeWord.length)
+      .replace(/^[,\s.!?~\-:]+/, "")
+      .trim();
+  }
+
   private restoreStatus() {
     if (this.snapshot.analysisStatus === "running") {
       this.snapshot = {
@@ -622,4 +671,3 @@ export class SibotRuntime {
     this.emitter.emit("snapshot", this.getSnapshot());
   }
 }
-

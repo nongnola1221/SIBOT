@@ -1,9 +1,16 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { app, BrowserWindow, ipcMain, screen } from "electron";
+import { app, BrowserWindow, ipcMain, screen, shell } from "electron";
 import { SibotRuntime } from "@sibot/core";
-import type { RuntimeCommand, RuntimeSnapshot, UserSettings } from "@sibot/shared";
+import type {
+  RuntimeCommand,
+  RuntimeSnapshot,
+  UpdateStatus,
+  UserSettings
+} from "@sibot/shared";
+import { ObsOverlayServer } from "./obsOverlayServer";
 import { SettingsStore } from "./settingsStore";
+import { UpdateManager } from "./updateManager";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
@@ -12,6 +19,8 @@ let mainWindow: BrowserWindow | null = null;
 let overlayWindow: BrowserWindow | null = null;
 let runtime: SibotRuntime | null = null;
 let settingsStore: SettingsStore | null = null;
+const obsOverlayServer = new ObsOverlayServer();
+let updateManager: UpdateManager | null = null;
 
 const preloadPath = path.join(__dirname, "../preload/index.mjs");
 const rendererPath = path.join(__dirname, "../renderer/index.html");
@@ -148,18 +157,35 @@ const createOverlayWindow = async () => {
 };
 
 const sendSnapshot = (snapshot: RuntimeSnapshot) => {
+  obsOverlayServer.updateSnapshot(snapshot);
+  void obsOverlayServer.ensureListening(snapshot.settings.obsOverlayPort);
   mainWindow?.webContents.send("sibot:snapshot", snapshot);
   overlayWindow?.webContents.send("sibot:snapshot", snapshot);
   syncOverlayWindow(snapshot);
 };
 
+const sendUpdateStatus = (status: UpdateStatus) => {
+  mainWindow?.webContents.send("sibot:update-status", status);
+  overlayWindow?.webContents.send("sibot:update-status", status);
+};
+
 const registerIpc = () => {
   ipcMain.handle("sibot:get-snapshot", () => runtime?.getSnapshot() ?? null);
+  ipcMain.handle("sibot:get-update-status", () => updateManager?.getStatus() ?? null);
   ipcMain.handle("sibot:update-settings", async (_event, patch: Partial<UserSettings>) => {
     return runtime?.updateSettings(patch) ?? null;
   });
   ipcMain.handle("sibot:command", async (_event, command: RuntimeCommand) => {
     return runtime?.runCommand(command) ?? null;
+  });
+  ipcMain.handle("sibot:check-for-updates", async () => updateManager?.check() ?? null);
+  ipcMain.handle("sibot:open-external", async (_event, url: string) => {
+    if (!url) {
+      return false;
+    }
+
+    await shell.openExternal(url);
+    return true;
   });
 };
 
@@ -173,6 +199,9 @@ const bootstrap = async () => {
       await settingsStore?.save(nextSettings);
     }
   });
+  updateManager = new UpdateManager((status) => {
+    sendUpdateStatus(status);
+  });
 
   await runtime.initialize();
   runtime.subscribe((snapshot) => {
@@ -184,6 +213,13 @@ const bootstrap = async () => {
   await createOverlayWindow();
 
   sendSnapshot(runtime.getSnapshot());
+  sendUpdateStatus(updateManager.getStatus());
+
+  if (app.isPackaged) {
+    setTimeout(() => {
+      void updateManager?.check();
+    }, 3000);
+  }
 };
 
 app.whenReady().then(async () => {
@@ -207,5 +243,6 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", () => {
+  void obsOverlayServer.stop();
   runtime?.dispose();
 });

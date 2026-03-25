@@ -25,7 +25,7 @@ export type SpeechStatus =
   | "followup-listen-window";
 
 export type MicrophoneStatus = "unknown" | "ready" | "disabled";
-export type TtsStatus = "off" | "ready" | "mock-speaking";
+export type TtsStatus = "off" | "ready" | "speaking";
 
 export type GameId = "overwatch2" | "valorant" | "pubg" | "league";
 
@@ -82,6 +82,29 @@ export interface RunningGameInfo {
   profile: GameProfile;
   processName: string;
   pid?: number;
+}
+
+export interface CaptureSourceInfo {
+  id: string;
+  name: string;
+  displayId: string;
+  thumbnailDataUrl?: string;
+}
+
+export interface UpdateStatus {
+  phase:
+    | "idle"
+    | "checking"
+    | "up-to-date"
+    | "update-available"
+    | "disabled"
+    | "error";
+  currentVersion: string;
+  latestVersion?: string;
+  checkedAt?: number;
+  downloadUrl?: string;
+  releaseUrl?: string;
+  message?: string;
 }
 
 export interface GameDetection {
@@ -161,6 +184,7 @@ export interface UserSettings {
   overlayFontScale: number;
   overlayOpacity: number;
   overlayShowNickname: boolean;
+  obsOverlayPort: number;
   ttsEnabled: boolean;
   ttsVolume: number;
   ttsRate: number;
@@ -173,6 +197,9 @@ export interface UserSettings {
   backgroundNoiseSensitivity: number;
   autoStartOnGameDetected: boolean;
   selectedGameProfile: GameId;
+  captureSourceId: string;
+  captureAnalysisEnabled: boolean;
+  captureSampleIntervalMs: number;
   eventCooldownMs: number;
   profanityMinimumIntervalMs: number;
   developerMode: boolean;
@@ -212,5 +239,5 @@ export type RuntimeCommand =
   | { type: "event/inject"; eventType?: AnalysisEventType }
   | { type: "utterance/test"; eventType?: AnalysisEventType }
   | { type: "speech/simulate-wake-word"; word?: string }
+  | { type: "speech/process-transcript"; text: string }
   | { type: "speech/submit-query"; text: string };
-

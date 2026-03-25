@@ -11,13 +11,18 @@
 - debug/mock fallback 게임 감지
 - 분석 시작 / 중지
 - mock 이벤트 주기 발생
+- 화면 캡처 기반 간이 실시간 분석 베타
 - 이벤트 기반 시비 멘트 생성
 - 앱 오버레이 창 출력
+- OBS Browser Source용 로컬 overlay URL 제공
+- 시스템 TTS 출력
+- Web Speech API 기반 라이브 음성 인식 베타
 - 자동 청취 윈도우 상태 머신
 - 테스트 질문 입력 기반 짧은 답변 생성
+- GitHub Release 기반 업데이트 확인
 - 로그 패널과 상태 JSON 확인
 
-실제 STT/TTS와 고정밀 CV/OCR은 아직 붙이지 않았고, 인터페이스와 mock provider를 먼저 완성했다.
+고정밀 STT/CV/OCR과 상용급 자동 업데이트 설치는 아직 아니지만, 실제 시스템 기능을 일부 사용하는 베타 기능까지 포함한 형태다.
 
 ## 왜 이런 구조인가
 
@@ -49,14 +54,19 @@ SIBOT은 UI와 로직이 강하게 분리되어야 한다.
 - 자동 청취 / 후속 청취 창 관리
 - 최근 이벤트 / 최근 발화 / 최근 질문 메모리
 - 투명 Electron 오버레이 창
+- OBS Browser Source용 로컬 HTTP overlay endpoint
+- Windows `System.Speech` / macOS `say` 기반 시스템 TTS
+- Web Speech API 기반 라이브 음성 인식 베타
+- Electron `desktopCapturer` 기반 화면 소스 선택 및 간이 분석 베타
+- GitHub Release 최신 버전 확인 및 exe 다운로드 링크 오픈
 
 ### mock / stub 상태
 
-- 실제 음성 인식(STT)
-- 실제 음성 합성(TTS 음성 출력)
-- 실제 웨이크워드 엔진
-- 실제 화면 캡처와 HUD 분석
-- OBS Browser Source용 로컬 HTTP overlay endpoint
+- 전용 로컬 웨이크워드 엔진
+- 게임별 HUD 정밀 OCR/CV 분석
+- 상용급 STT provider 교체
+- 자동 업데이트 설치/패치 적용
+- OBS WebSocket 고도화
 
 현재는 이 부분들을 provider interface와 구조로 열어 두고, mock implementation으로 UI와 상태 흐름을 먼저 검증한다.
 
@@ -71,13 +81,17 @@ SIBOT/
 │     └─ src/
 │        ├─ main/
 │        │  ├─ index.ts
+│        │  ├─ obsOverlayServer.ts
 │        │  └─ settingsStore.ts
+│        │  └─ updateManager.ts
 │        ├─ preload/
 │        │  └─ index.ts
 │        ├─ renderer/
 │        │  ├─ App.tsx
 │        │  ├─ main.tsx
 │        │  ├─ sibot.d.ts
+│        │  ├─ useCaptureAnalysis.ts
+│        │  ├─ useLiveVoice.ts
 │        │  ├─ useSibotRuntime.ts
 │        │  ├─ components/
 │        │  │  ├─ OverlayPreview.tsx
@@ -128,6 +142,7 @@ SIBOT/
 │           ├─ mockSTT.ts
 │           ├─ mockTTS.ts
 │           └─ mockWakeWord.ts
+│           └─ systemTTS.ts
 ├─ examples/
 │  └─ sibot.settings.example.json
 ├─ electron.vite.config.ts
@@ -144,6 +159,8 @@ SIBOT/
 
 - BrowserWindow 생성
 - overlay window 생성 / 위치 제어
+- OBS browser source용 로컬 overlay 서버 구동
+- GitHub Release 업데이트 상태 조회
 - 설정 파일 로드
 - `SibotRuntime` 인스턴스 생성
 - IPC 핸들러 등록
@@ -158,6 +175,10 @@ SIBOT/
 - mock 이벤트 주입
 - 웨이크워드 시뮬레이션
 - 질문 입력 테스트
+- 라이브 음성 인식 시작 / 중지
+- 화면 캡처 분석 시작 / 중지
+- OBS 브라우저 소스 URL 복사
+- 업데이트 확인 및 최신 exe 링크 열기
 - 상태 JSON 시각화
 
 ### 3. Core Runtime
@@ -174,10 +195,11 @@ SIBOT/
 
 ### 4. Event Analysis Layer
 
-현재는 `MockAnalysisEngine`만 구현했다.
+현재는 `MockAnalysisEngine`과 renderer 기반 `desktopCapturer` 휴리스틱 분석을 함께 사용한다.
 
 - 10~18초 간격으로 mock 이벤트 발생
 - 수동 inject 버튼으로 특정 이벤트 강제 발생 가능
+- 실시간 화면 프레임 변화량 기반 간이 이벤트 주입 가능
 - 이벤트 메타데이터 / severity / cooldownGroup / priorityScore 생성
 
 향후 이 레이어를 실제 화면 캡처 기반 분석기로 교체하면 된다.
@@ -201,8 +223,8 @@ SIBOT/
 - `TTSProvider`
 - `WakeWordProvider`
 
-현재 기본 구현은 mock provider다.  
-실제 Windows용 STT/TTS/wakeword 엔진을 붙일 때 runtime 코어를 갈아엎을 필요가 없도록 인터페이스를 먼저 고정했다.
+현재 TTS는 시스템 provider를 사용하고, STT는 renderer의 Web Speech API 베타를 쓴다.  
+전용 Windows용 STT/TTS/wakeword 엔진으로 교체할 때 runtime 코어를 갈아엎을 필요가 없도록 인터페이스를 먼저 고정했다.
 
 ## 설정 스키마
 
@@ -227,6 +249,7 @@ SIBOT/
 - `overlayPosition`
 - `overlayDurationMs`
 - `overlayHistoryCount`
+- `obsOverlayPort`
 - `ttsEnabled`
 - `ttsVolume`
 - `ttsRate`
@@ -238,6 +261,9 @@ SIBOT/
 - `maxConversationTurns`
 - `autoStartOnGameDetected`
 - `selectedGameProfile`
+- `captureSourceId`
+- `captureAnalysisEnabled`
+- `captureSampleIntervalMs`
 - `eventCooldownMs`
 - `debugMode`
 
@@ -271,8 +297,16 @@ SIBOT/
 - `overlayDurationMs`가 지나면 자동 숨김
 - `bubble`, `chat`, `subtitle` 3가지 스타일
 
-OBS Browser Source 모드는 현재 설정/구조만 열려 있다.  
-실제 OBS URL endpoint는 아직 없다. 이후 아래 방식 중 하나로 확장하면 된다.
+OBS Browser Source 모드는 현재 로컬 HTTP endpoint로 동작한다.  
+기본 주소는 다음 형태다.
+
+```text
+http://127.0.0.1:43115/overlay
+```
+
+포트는 설정에서 변경할 수 있다.
+
+이후 고도화 방향은 다음과 같다.
 
 - Electron 내부 로컬 HTTP 서버 추가
 - WebSocket + 별도 overlay 웹앱 제공
@@ -313,6 +347,8 @@ npm run dev
 주의:
 
 - macOS에서 `active-win`이 실제 활성 창 정보를 읽으려면 접근성 권한이 필요할 수 있다.
+- 화면 캡처 분석을 쓰려면 시스템 화면 녹화 권한이 필요할 수 있다.
+- 라이브 음성 인식을 쓰려면 마이크 권한이 필요할 수 있다.
 - 권한이 없거나 지원 게임이 없으면 `debugMode` fallback으로 mock 게임이 감지된다.
 - 이 저장소에서는 GUI 세션이 없는 환경에서 `npm run dev`를 실제 실행하진 않았다. 대신 `typecheck`와 `build`는 성공 확인했다.
 
@@ -382,6 +418,8 @@ git push origin v0.1.0
 
 또는 GitHub Actions 탭에서 `Release Windows Build`를 수동 실행하고 `release_tag`를 넣어도 된다.
 
+앱 내부에서도 GitHub Release 최신 버전을 확인하고, 최신 `.exe` 다운로드 링크를 열 수 있다.
+
 ## Mock 모드 데모 시나리오
 
 앱을 처음 띄운 뒤 아래 순서로 테스트하면 된다.
@@ -394,8 +432,10 @@ git push origin v0.1.0
 6. `Mock 이벤트` 버튼으로 즉시 이벤트 주입
 7. `웨이크워드 시뮬레이션` 버튼으로 자동 청취 창 열기
 8. 질문 입력창에 `왜 내 잘못인데`, `어떻게 해야 돼` 같은 테스트 질문 입력
-9. `오버레이` 탭에서 스타일과 위치 바꾸기
-10. 앱 재실행 후 설정 유지 확인
+9. `음성/청취` 탭에서 라이브 음성 인식 시작
+10. `게임/감지` 탭에서 캡처 소스 선택 후 캡처 분석 시작
+11. `오버레이` 탭에서 OBS URL 복사 후 브라우저나 OBS에 붙이기
+12. 앱 재실행 후 설정 유지 확인
 
 ## 실제 게임 감지 구조 설명
 
@@ -443,7 +483,7 @@ git push origin v0.1.0
 추천 확장 방향:
 
 - STT: Whisper.cpp / faster-whisper sidecar / Azure / Deepgram / Google
-- TTS: Windows SAPI / Azure / ElevenLabs / Edge TTS
+- TTS: 현재는 Windows SAPI 계열(System.Speech) / macOS `say`, 이후 Azure / ElevenLabs / Edge TTS
 - Wake Word: Porcupine / openWakeWord / local keyword spotter
 
 교체 방식:
@@ -464,21 +504,22 @@ git push origin v0.1.0
 4. 발화 템플릿 추가
 5. 실제 분석 ruleset 추가
 
-## 향후 Auto Update 확장 포인트
+## Auto Update 현황과 확장 포인트
 
-현재는 auto update를 넣지 않았다.  
-그러나 Electron 구조상 다음 순서로 붙이기 쉽다.
+현재는 다음 수준까지 구현했다.
+
+- GitHub Releases 최신 버전 확인
+- 최신 버전/현재 버전 비교
+- 최신 `.exe` 다운로드 링크 열기
+- renderer에 업데이트 상태 브리지
+
+아직 자동 설치형은 아니다.  
+완전한 auto update로 가려면 다음 순서가 필요하다.
 
 1. `electron-updater` 추가
-2. main process 부팅 시 update check
-3. renderer에 업데이트 상태 이벤트 브리지
-4. GitHub Releases 또는 private artifact server 연결
-
-추천 배치:
-
-- `apps/desktop/src/main/updater.ts`
-- `ipc` 채널: `sibot:update-status`
-- 설정 항목: 자동 업데이트 on/off, 베타 채널 on/off
+2. NSIS differential update metadata 연결
+3. 다운로드 진행률 및 재시작 설치 흐름 추가
+4. stable/beta 채널 분기
 
 ## 주요 스크립트
 

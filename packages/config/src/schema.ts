@@ -26,6 +26,7 @@ const settingsSchema = z.object({
   overlayFontScale: z.number().min(0.7).max(1.8),
   overlayOpacity: z.number().min(0.1).max(1),
   overlayShowNickname: z.boolean(),
+  obsOverlayPort: z.number().int().min(1024).max(65535),
   ttsEnabled: z.boolean(),
   ttsVolume: z.number().min(0).max(1),
   ttsRate: z.number().min(0.5).max(1.6),
@@ -38,6 +39,9 @@ const settingsSchema = z.object({
   backgroundNoiseSensitivity: z.number().min(0).max(1),
   autoStartOnGameDetected: z.boolean(),
   selectedGameProfile: z.enum(["overwatch2", "valorant", "pubg", "league"]),
+  captureSourceId: z.string(),
+  captureAnalysisEnabled: z.boolean(),
+  captureSampleIntervalMs: z.number().int().min(200).max(5000),
   eventCooldownMs: z.number().min(1000).max(30000),
   profanityMinimumIntervalMs: z.number().min(4000).max(120000),
   developerMode: z.boolean(),
@@ -70,4 +74,3 @@ export const sanitizeSettings = (input: unknown): UserSettings => {
 };
 
 export { settingsSchema };
-
