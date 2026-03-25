@@ -46,7 +46,7 @@ SIBOT은 UI와 로직이 강하게 분리되어야 한다.
 - Electron main/preload/renderer/overlay 4계층 연결
 - React 대시보드와 탭 기반 설정 UI
 - `zod` 기반 설정 스키마와 JSON persistence
-- `active-win` + `systeminformation` 기반 활성 게임 감지 구조
+- `systeminformation` + OS별 활성 창 조회 기반 게임 감지 구조
 - `SibotRuntime` 상태 머신
 - 이벤트 큐 / 이벤트 쿨다운 / 발화 중복 회피
 - 캐릭터별 템플릿 세트
@@ -281,7 +281,7 @@ SIBOT/
 감지 방식:
 
 1. `systeminformation.processes()`로 실행 중 프로세스 조회
-2. `active-win`으로 활성 창 제목 + owner process 확인
+2. Windows는 PowerShell, macOS는 `osascript`로 활성 창 제목 + foreground process 확인
 3. `processNames` / `windowTitleHints` 매칭
 4. 실제 감지가 없고 `debugMode = true`면 선택된 프로필로 mock fallback
 
@@ -346,7 +346,7 @@ npm run dev
 
 주의:
 
-- macOS에서 `active-win`이 실제 활성 창 정보를 읽으려면 접근성 권한이 필요할 수 있다.
+- macOS에서 `osascript` 기반 활성 창 조회는 접근성 권한이 필요할 수 있다.
 - 화면 캡처 분석을 쓰려면 시스템 화면 녹화 권한이 필요할 수 있다.
 - 라이브 음성 인식을 쓰려면 마이크 권한이 필요할 수 있다.
 - 권한이 없거나 지원 게임이 없으면 `debugMode` fallback으로 mock 게임이 감지된다.

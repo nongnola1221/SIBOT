@@ -1,10 +1,11 @@
-import activeWin from "active-win";
 import si from "systeminformation";
 import type { GameDetection, GameProfile, RunningGameInfo, UserSettings } from "@sibot/shared";
 import { uniqueBy } from "@sibot/shared";
+import { getActiveWindowSnapshot } from "./activeWindow";
 import { GAME_PROFILES } from "./profiles";
 
 const normalize = (value: string | null | undefined) => (value ?? "").trim().toLowerCase();
+const stripExe = (value: string) => value.replace(/\.exe$/i, "");
 
 export class GameDetectionService {
   constructor(private readonly profiles: GameProfile[] = GAME_PROFILES) {}
@@ -12,11 +13,12 @@ export class GameDetectionService {
   resolveGameProfile(processName?: string | null, windowTitle?: string | null) {
     const normalizedProcess = normalize(processName);
     const normalizedTitle = normalize(windowTitle);
+    const processVariants = new Set([normalizedProcess, stripExe(normalizedProcess)]);
 
     return (
       this.profiles.find((profile) => {
         const processMatch = profile.processNames.some((candidate) =>
-          normalizedProcess.includes(normalize(candidate))
+          processVariants.has(normalize(candidate)) || processVariants.has(stripExe(normalize(candidate)))
         );
         const titleMatch = profile.windowTitleHints.some((candidate) =>
           normalizedTitle.includes(normalize(candidate))
@@ -61,9 +63,9 @@ export class GameDetectionService {
     let profile: GameProfile | null = null;
 
     try {
-      const active = await activeWin();
+      const active = await getActiveWindowSnapshot();
       windowTitle = active?.title ?? null;
-      processName = active?.owner?.name ?? null;
+      processName = active?.processName ?? null;
       profile = this.resolveGameProfile(processName, windowTitle);
     } catch {
       profile = null;
