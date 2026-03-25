@@ -380,7 +380,7 @@ export const App = () => {
     detectionSource === "process"
       ? "현재는 실제 실행 중인 게임 프로세스와 창 기준으로 감지된 상태입니다."
       : detectionSource === "mock"
-        ? "현재는 실게임 미감지 상태라 mock fallback으로 들어가 있습니다. 실제 감지만 쓰려면 디버그 감지를 끄면 됩니다."
+        ? "이 상태는 고급 테스트 모드에서만 보입니다."
         : "지원 게임 프로세스나 창 제목이 아직 잡히지 않았습니다. 게임 실행 후 감지 새로고침을 눌러보세요.";
   const showUpdateBanner = ["update-available", "downloading", "downloaded", "installing"].includes(
     updateStatus?.phase ?? ""
@@ -651,15 +651,6 @@ export const App = () => {
                 >
                   감지 새로고침
                 </button>
-                {settings.debugMode ? (
-                  <button
-                    className="button"
-                    onClick={() => setSetting("debugMode", false)}
-                    type="button"
-                  >
-                    Mock 감지 끄기
-                  </button>
-                ) : null}
               </div>
             </SectionCard>
 
@@ -724,7 +715,7 @@ export const App = () => {
                     : "분석 시작 후 멘트 테스트나 질문 입력으로 바로 동작을 볼 수 있습니다."}
                 </p>
                 <p className="field__description">
-                  실게임 감지가 안 잡혀도 디버그 감지가 켜져 있으면 기본 동작 확인은 가능합니다.
+                  실제 게임이 감지돼야 분석이 시작됩니다. 음성 인식은 음성 설정에서 직접 시작해야 합니다.
                 </p>
               </div>
               <div className="button-row">
@@ -739,13 +730,15 @@ export const App = () => {
                 >
                   {snapshot.analysisStatus === "running" ? "분석 중지" : "분석 시작"}
                 </button>
-                <button
-                  className="button"
-                  onClick={() => void sendCommand({ type: "utterance/test", eventType: "death" })}
-                  type="button"
-                >
-                  데스 멘트 테스트
-                </button>
+                {snapshot.detectedGame?.source === "process" || settings.debugMode || settings.developerMode ? (
+                  <button
+                    className="button"
+                    onClick={() => void sendCommand({ type: "utterance/test", eventType: "death" })}
+                    type="button"
+                  >
+                    데스 멘트 테스트
+                  </button>
+                ) : null}
                 <button
                   className="button"
                   onClick={() =>
@@ -1416,7 +1409,7 @@ export const App = () => {
             <SectionCard title="게임 감지" eyebrow="Detection & Rule Target">
               <div className="field-grid">
                 <SelectField
-                  description="debug/mock fallback 대상"
+                  description="고급 테스트에서 사용할 기본 게임 프로필"
                   label="선택 게임 프로필"
                   onChange={(value) => setSetting("selectedGameProfile", value)}
                   options={GAME_PROFILES.map((profile) => ({
@@ -1433,8 +1426,8 @@ export const App = () => {
                 />
                 <ToggleField
                   checked={settings.debugMode}
-                  description="실게임이 없어도 mock 감지 허용"
-                  label="디버그 감지"
+                  description="실게임 없이 테스트 이벤트 버튼 사용 허용"
+                  label="테스트 모드"
                   onChange={(checked) => setSetting("debugMode", checked)}
                 />
                 <ToggleField

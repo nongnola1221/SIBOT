@@ -1,7 +1,7 @@
 {
   "name": "sibot",
   "productName": "SIBOT",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "private": true,
   "type": "module",
   "description": "SIBOT - real-time taunt assistant for game streamers",

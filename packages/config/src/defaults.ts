@@ -36,8 +36,8 @@ export const defaultSettings: UserSettings = {
   captureSampleIntervalMs: 700,
   eventCooldownMs: 9000,
   profanityMinimumIntervalMs: 22000,
-  developerMode: true,
-  debugMode: true,
+  developerMode: false,
+  debugMode: false,
   eventSensitivity: 0.55,
   priorityConflictMode: "highest"
 };

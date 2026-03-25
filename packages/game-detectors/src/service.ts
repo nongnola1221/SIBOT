@@ -76,22 +76,6 @@ export class GameDetectionService {
       processName = runningGames[0].processName;
     }
 
-    if (!profile && settings.debugMode) {
-      profile =
-        this.profiles.find((item) => item.id === settings.selectedGameProfile) ?? this.profiles[0];
-      processName = "mock-game.exe";
-      windowTitle = `Mock ${profile.name}`;
-
-      return {
-        profile,
-        processName,
-        activeWindowTitle: windowTitle,
-        detectedAt: Date.now(),
-        source: "mock",
-        runningGames
-      };
-    }
-
     return {
       profile,
       processName,

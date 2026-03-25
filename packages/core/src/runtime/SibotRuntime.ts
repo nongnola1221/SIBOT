@@ -2,6 +2,7 @@ import { EventEmitter } from "node:events";
 import { mergeSettings } from "@sibot/config";
 import { CooldownController, PriorityEventQueue } from "@sibot/event-engine";
 import { GameDetectionService } from "@sibot/game-detectors";
+import { GAME_PROFILES } from "@sibot/game-profiles";
 import {
   APP_NAME,
   DEFAULT_LOG_LIMIT,
@@ -213,16 +214,17 @@ export class SibotRuntime {
   }
 
   async startAnalysis() {
-    const detectedProfile =
-      this.snapshot.detectedGame?.profile ??
-      (await this.refreshDetection())?.profile ??
-      null;
+    const detection =
+      this.snapshot.detectedGame?.source === "process"
+        ? this.snapshot.detectedGame
+        : await this.refreshDetection();
+    const detectedProfile = detection?.source === "process" ? detection.profile : null;
 
     if (!detectedProfile) {
-      this.log("warn", "analysis", "No supported game detected for analysis start");
+      this.log("warn", "analysis", "No real supported game detected for analysis start");
       this.snapshot = {
         ...this.snapshot,
-        appStatus: "ready",
+        appStatus: this.snapshot.detectedGame?.profile ? "ready" : "idle",
         analysisStatus: "stopped"
       };
       this.emitSnapshot();
@@ -346,12 +348,13 @@ export class SibotRuntime {
   }
 
   async injectMockEvent(eventType?: AnalysisEventType) {
-    const profile = this.snapshot.detectedGame?.profile;
-    if (!profile) {
-      await this.refreshDetection();
-    }
+    const activeProfile =
+      this.snapshot.detectedGame?.profile ??
+      (this.snapshot.settings.debugMode || this.snapshot.settings.developerMode
+        ? GAME_PROFILES.find((profile) => profile.id === this.snapshot.settings.selectedGameProfile)
+        : null) ??
+      null;
 
-    const activeProfile = this.snapshot.detectedGame?.profile;
     if (!activeProfile) {
       return null;
     }
@@ -443,7 +446,7 @@ export class SibotRuntime {
       autoListenOpen: false,
       runtimeFlags: {
         autoStartEligible: false,
-        mockMode: settings.debugMode,
+        mockMode: false,
         developerMode: settings.developerMode
       }
     };
@@ -466,6 +469,10 @@ export class SibotRuntime {
 
     this.adlibTimer = setInterval(() => {
       if (this.snapshot.analysisStatus !== "running") {
+        return;
+      }
+
+      if (this.snapshot.detectedGame?.source !== "process") {
         return;
       }
 
@@ -591,7 +598,7 @@ export class SibotRuntime {
       runtimeFlags: {
         ...this.snapshot.runtimeFlags,
         autoStartEligible: Boolean(detection?.profile),
-        mockMode: detection?.source === "mock" || this.snapshot.settings.debugMode
+        mockMode: detection?.source === "mock"
       }
     };
 
@@ -678,7 +685,7 @@ export class SibotRuntime {
 
     const normalized = text.toLowerCase();
     return this.snapshot.settings.wakeWords.some((word) =>
-      normalized.startsWith(word.toLowerCase())
+      normalized.includes(word.toLowerCase())
     );
   }
 
@@ -688,17 +695,22 @@ export class SibotRuntime {
     }
 
     const normalized = text.toLowerCase().trim();
-
-    return (
-      this.snapshot.settings.wakeWords.find((word) =>
-        normalized.startsWith(word.toLowerCase())
-      ) ?? null
+    const sortedWords = [...this.snapshot.settings.wakeWords].sort(
+      (left, right) => right.length - left.length
     );
+
+    return sortedWords.find((word) => normalized.includes(word.toLowerCase())) ?? null;
   }
 
   private stripWakeWord(text: string, wakeWord: string) {
-    return text
-      .slice(wakeWord.length)
+    const lowerText = text.toLowerCase();
+    const startIndex = lowerText.indexOf(wakeWord.toLowerCase());
+
+    if (startIndex === -1) {
+      return text.trim();
+    }
+
+    return `${text.slice(0, startIndex)} ${text.slice(startIndex + wakeWord.length)}`
       .replace(/^[,\s.!?~\-:]+/, "")
       .trim();
   }
