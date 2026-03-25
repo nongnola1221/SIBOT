@@ -1,7 +1,7 @@
 {
   "name": "sibot",
   "productName": "SIBOT",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "type": "module",
   "description": "SIBOT - real-time taunt assistant for game streamers",
@@ -14,8 +14,8 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit",
-    "package:dir": "electron-vite build && electron-builder --dir",
-    "package:win": "electron-vite build && electron-builder --win nsis"
+    "package:dir": "electron-vite build && electron-builder --dir --publish never",
+    "package:win": "electron-vite build && electron-builder --win nsis --publish never"
   },
   "dependencies": {
     "react": "^18.3.1",
