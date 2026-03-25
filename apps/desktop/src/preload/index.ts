@@ -1,9 +1,4 @@
-import {
-  contextBridge,
-  desktopCapturer,
-  ipcRenderer,
-  type IpcRendererEvent
-} from "electron";
+import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
 import type {
   CaptureSourceInfo,
   RuntimeCommand,
@@ -24,23 +19,8 @@ const api = {
   downloadUpdate: () => ipcRenderer.invoke("sibot:download-update") as Promise<UpdateStatus | null>,
   installUpdate: () => ipcRenderer.invoke("sibot:install-update") as Promise<boolean>,
   openExternal: (url: string) => ipcRenderer.invoke("sibot:open-external", url) as Promise<boolean>,
-  listCaptureSources: async (): Promise<CaptureSourceInfo[]> => {
-    const sources = await desktopCapturer.getSources({
-      types: ["screen", "window"],
-      fetchWindowIcons: true,
-      thumbnailSize: {
-        width: 320,
-        height: 180
-      }
-    });
-
-    return sources.map((source) => ({
-      id: source.id,
-      name: source.name,
-      displayId: source.display_id,
-      thumbnailDataUrl: source.thumbnail.toDataURL()
-    }));
-  },
+  listCaptureSources: () =>
+    ipcRenderer.invoke("sibot:list-capture-sources") as Promise<CaptureSourceInfo[]>,
   onSnapshot: (handler: (snapshot: RuntimeSnapshot) => void) => {
     const listener = (_event: IpcRendererEvent, snapshot: RuntimeSnapshot) => {
       handler(snapshot);

@@ -1,8 +1,9 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { app, BrowserWindow, ipcMain, screen, shell } from "electron";
+import { app, BrowserWindow, desktopCapturer, ipcMain, screen, shell } from "electron";
 import { SibotRuntime } from "@sibot/core";
 import type {
+  CaptureSourceInfo,
   RuntimeCommand,
   RuntimeSnapshot,
   UpdateStatus,
@@ -41,7 +42,8 @@ const createMainWindow = async () => {
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      sandbox: false
     }
   });
 
@@ -144,7 +146,8 @@ const createOverlayWindow = async () => {
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      sandbox: false
     }
   });
 
@@ -183,6 +186,23 @@ const sendUpdateStatus = (status: UpdateStatus) => {
 const registerIpc = () => {
   ipcMain.handle("sibot:get-snapshot", () => runtime?.getSnapshot() ?? null);
   ipcMain.handle("sibot:get-update-status", () => updateManager?.getStatus() ?? null);
+  ipcMain.handle("sibot:list-capture-sources", async (): Promise<CaptureSourceInfo[]> => {
+    const sources = await desktopCapturer.getSources({
+      types: ["screen", "window"],
+      fetchWindowIcons: true,
+      thumbnailSize: {
+        width: 320,
+        height: 180
+      }
+    });
+
+    return sources.map((source) => ({
+      id: source.id,
+      name: source.name,
+      displayId: source.display_id,
+      thumbnailDataUrl: source.thumbnail.toDataURL()
+    }));
+  });
   ipcMain.handle("sibot:update-settings", async (_event, patch: Partial<UserSettings>) => {
     return runtime?.updateSettings(patch) ?? null;
   });
