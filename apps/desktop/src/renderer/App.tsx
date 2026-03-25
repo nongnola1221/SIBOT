@@ -33,6 +33,11 @@ const DETECTION_SOURCE_LABELS = {
   inactive: "감지 없음"
 } as const;
 
+const STT_PROVIDER_LABELS: Record<string, string> = {
+  "windows-system-stt": "Windows 기본 음성 인식",
+  "mock-stt": "음성 인식 비활성"
+};
+
 const ToggleField = ({
   label,
   description,
@@ -150,6 +155,7 @@ const StatusGrid = ({ snapshot }: { snapshot: RuntimeSnapshot }) => {
   const detectionSource = snapshot.detectedGame?.source ?? "inactive";
   const lastEvent = snapshot.recentEvents[0];
   const lastUtterance = snapshot.recentUtterances[0];
+  const sttProviderLabel = STT_PROVIDER_LABELS[snapshot.sttProviderId] ?? snapshot.sttProviderId;
 
   return (
     <div className="status-grid">
@@ -164,9 +170,9 @@ const StatusGrid = ({ snapshot }: { snapshot: RuntimeSnapshot }) => {
         <small>{snapshot.analysisStatus}</small>
       </div>
       <div className="status-grid__item">
-        <span className="status-grid__label">AI 이름</span>
-        <strong>{snapshot.settings.aiName}</strong>
-        <small>{MODE_LABELS[snapshot.settings.mode]}</small>
+        <span className="status-grid__label">현재 모드</span>
+        <strong>{MODE_LABELS[snapshot.settings.mode]}</strong>
+        <small>{snapshot.settings.aiName}</small>
       </div>
       <div className="status-grid__item">
         <span className="status-grid__label">청취 상태</span>
@@ -178,9 +184,9 @@ const StatusGrid = ({ snapshot }: { snapshot: RuntimeSnapshot }) => {
         </small>
       </div>
       <div className="status-grid__item">
-        <span className="status-grid__label">오버레이</span>
-        <strong>{snapshot.isOverlayVisible ? "ON" : "OFF"}</strong>
-        <small>{snapshot.settings.overlayMode}</small>
+        <span className="status-grid__label">STT 엔진</span>
+        <strong>{sttProviderLabel}</strong>
+        <small>{snapshot.lastTranscript ?? "마지막 인식 없음"}</small>
       </div>
       <div className="status-grid__item">
         <span className="status-grid__label">TTS 상태</span>
@@ -373,9 +379,22 @@ export const App = () => {
   }
 
   const settings = snapshot.settings;
+  const visibleTabs = tabs.filter((tab) => {
+    if (tab.id === "dashboard" || tab.id === "speech" || tab.id === "game") {
+      return true;
+    }
+
+    return settings.developerMode;
+  });
   const obsOverlayUrl = `http://127.0.0.1:${settings.obsOverlayPort}/overlay`;
   const detectionSource = snapshot.detectedGame?.source ?? "inactive";
   const detectionSourceLabel = DETECTION_SOURCE_LABELS[detectionSource];
+  const sttProviderLabel = STT_PROVIDER_LABELS[snapshot.sttProviderId] ?? snapshot.sttProviderId;
+  const canStartLiveAnalysis = detectionSource === "process";
+  const latestEvent = snapshot.recentEvents[0] ?? null;
+  const latestUtterance = snapshot.recentUtterances[0] ?? null;
+  const latestTurn = snapshot.recentTurns[0] ?? null;
+  const lastHeardText = snapshot.lastTranscript ?? liveVoice.lastTranscript ?? "아직 없음";
   const detectionHelpText =
     detectionSource === "process"
       ? "현재는 실제 실행 중인 게임 프로세스와 창 기준으로 감지된 상태입니다."
@@ -456,6 +475,12 @@ export const App = () => {
     void updateSettings({ captureAnalysisEnabled: false });
   };
 
+  useEffect(() => {
+    if (!visibleTabs.some((tab) => tab.id === activeTab)) {
+      setActiveTab("dashboard");
+    }
+  }, [activeTab, visibleTabs]);
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -510,7 +535,7 @@ export const App = () => {
 
         {!simpleView ? (
           <nav className="tab-nav">
-            {tabs.map((tab) => (
+            {visibleTabs.map((tab) => (
               <button
                 key={tab.id}
                 className={tab.id === activeTab ? "tab-nav__item is-active" : "tab-nav__item"}
@@ -539,6 +564,7 @@ export const App = () => {
           <div className="hero-panel__actions">
             <button
               className="button button--primary"
+              disabled={!canStartLiveAnalysis && snapshot.analysisStatus !== "running"}
               onClick={() =>
                 void sendCommand({
                   type: snapshot.analysisStatus === "running" ? "analysis/stop" : "analysis/start"
@@ -555,7 +581,7 @@ export const App = () => {
             >
               감지 새로고침
             </button>
-            {!simpleView ? (
+            {!simpleView && settings.developerMode ? (
               <button
                 className="button"
                 onClick={() => void sendCommand({ type: "event/inject" })}
@@ -618,7 +644,7 @@ export const App = () => {
 
         {simpleView ? (
           <div className="section-grid section-grid--dashboard">
-            <SectionCard title="1. 게임 감지 확인" eyebrow="Quick Start">
+            <SectionCard title="게임 감지" eyebrow="Live Status">
               <div className="detail-grid">
                 <div>
                   <span>감지 상태</span>
@@ -651,35 +677,37 @@ export const App = () => {
                 >
                   감지 새로고침
                 </button>
+                <button className="button" onClick={() => setSimpleView(false)} type="button">
+                  고급 설정
+                </button>
               </div>
             </SectionCard>
 
-            <SectionCard title="2. TTS 테스트" eyebrow="Quick Start">
+            <SectionCard title="음성 상태" eyebrow="Mic & TTS">
               <div className="detail-grid">
                 <div>
-                  <span>TTS 설정</span>
-                  <strong>{settings.ttsEnabled ? "켜짐" : "꺼짐"}</strong>
+                  <span>STT 엔진</span>
+                  <strong>{sttProviderLabel}</strong>
                 </div>
                 <div>
-                  <span>런타임 상태</span>
-                  <strong>{snapshot.ttsStatus}</strong>
+                  <span>마이크 상태</span>
+                  <strong>{snapshot.microphoneStatus}</strong>
                 </div>
                 <div>
-                  <span>음량</span>
-                  <strong>{Math.round(settings.ttsVolume * 100)}%</strong>
+                  <span>마지막 인식</span>
+                  <strong>{lastHeardText}</strong>
                 </div>
                 <div>
-                  <span>속도</span>
-                  <strong>{settings.ttsRate.toFixed(2)}x</strong>
+                  <span>웨이크워드</span>
+                  <strong>{settings.wakeWords[0] ?? "없음"}</strong>
                 </div>
               </div>
               <div className="info-panel">
                 <p className="info-panel__primary">
-                  Windows는 시스템 음성으로 재생됩니다. 먼저 여기서 테스트해보면 됩니다.
+                  마이크는 앱 실행 시 바로 붙고, 평소에는 웨이크워드만 기다립니다.
                 </p>
                 <p className="field__description">
-                  소리가 안 나면 아래 테스트 버튼을 누른 뒤 최근 로그에 `TTS test failed`가 뜨는지
-                  확인하면 됩니다.
+                  음성이 안 잡히면 Windows 기본 음성 인식 언어 설치 여부와 기본 마이크 설정을 먼저 확인하면 됩니다.
                 </p>
               </div>
               <div className="button-row">
@@ -697,30 +725,79 @@ export const App = () => {
                 >
                   TTS 테스트
                 </button>
-                <button
-                  className="button"
-                  onClick={() => setActiveTab("speech")}
-                  type="button"
-                >
-                  음성 설정 열기
-                </button>
+                {snapshot.microphoneStatus !== "ready" && liveVoice.supported ? (
+                  <button
+                    className={liveVoice.listening ? "button is-active" : "button"}
+                    onClick={() =>
+                      liveVoice.listening
+                        ? liveVoice.stopListening()
+                        : void liveVoice.startListening()
+                    }
+                    type="button"
+                  >
+                    브라우저 음성 베타 {liveVoice.listening ? "중지" : "시작"}
+                  </button>
+                ) : (
+                  <button
+                    className="button"
+                    onClick={() => {
+                      setSimpleView(false);
+                      setActiveTab("speech");
+                    }}
+                    type="button"
+                  >
+                    음성 설정 열기
+                  </button>
+                )}
               </div>
             </SectionCard>
 
-            <SectionCard title="3. 분석 시작" eyebrow="Quick Start">
+            <SectionCard title="지금 시봇이 본 상황" eyebrow="Context">
+              <div className="list-stack">
+                <div className="info-panel">
+                  <p className="info-panel__primary">
+                    최근 이벤트: {latestEvent ? EVENT_LABELS[latestEvent.type] : "아직 없음"}
+                  </p>
+                  <p className="field__description">
+                    {latestEvent?.contextSummary ?? "실제 게임 분석이 시작되면 여기서 왜 멘트가 나왔는지 바로 보입니다."}
+                  </p>
+                </div>
+                <div className="info-panel">
+                  <p className="info-panel__primary">
+                    최근 발화: {latestUtterance?.text ?? "아직 없음"}
+                  </p>
+                  <p className="field__description">
+                    {latestUtterance
+                      ? `${latestUtterance.type} · ${latestUtterance.mode}`
+                      : "멘트가 나오면 여기 누적됩니다."}
+                  </p>
+                </div>
+                <div className="info-panel">
+                  <p className="info-panel__primary">
+                    최근 대화: {latestTurn ? latestTurn.question : "아직 없음"}
+                  </p>
+                  <p className="field__description">
+                    {latestTurn?.answer ?? "웨이크워드 후 질문하면 여기 답변이 남습니다."}
+                  </p>
+                </div>
+              </div>
+            </SectionCard>
+
+            <SectionCard title="실행" eyebrow="Actions">
               <div className="info-panel">
                 <p className="info-panel__primary">
                   {snapshot.analysisStatus === "running"
                     ? "분석이 돌아가는 중입니다."
-                    : "분석 시작 후 멘트 테스트나 질문 입력으로 바로 동작을 볼 수 있습니다."}
+                    : "실제 게임 감지 후 분석 시작을 누르면 이벤트와 멘트가 들어옵니다."}
                 </p>
                 <p className="field__description">
-                  실제 게임이 감지돼야 분석이 시작됩니다. 음성 인식은 음성 설정에서 직접 시작해야 합니다.
+                  게임이 감지되지 않으면 분석 시작 버튼은 막힙니다. 먼저 감지 상태를 확인하세요.
                 </p>
               </div>
               <div className="button-row">
                 <button
                   className="button button--primary"
+                  disabled={!canStartLiveAnalysis && snapshot.analysisStatus !== "running"}
                   onClick={() =>
                     void sendCommand({
                       type: snapshot.analysisStatus === "running" ? "analysis/stop" : "analysis/start"
@@ -730,15 +807,6 @@ export const App = () => {
                 >
                   {snapshot.analysisStatus === "running" ? "분석 중지" : "분석 시작"}
                 </button>
-                {snapshot.detectedGame?.source === "process" || settings.debugMode || settings.developerMode ? (
-                  <button
-                    className="button"
-                    onClick={() => void sendCommand({ type: "utterance/test", eventType: "death" })}
-                    type="button"
-                  >
-                    데스 멘트 테스트
-                  </button>
-                ) : null}
                 <button
                   className="button"
                   onClick={() =>
@@ -748,6 +816,15 @@ export const App = () => {
                 >
                   웨이크워드 테스트
                 </button>
+                {settings.developerMode ? (
+                  <button
+                    className="button"
+                    onClick={() => void sendCommand({ type: "utterance/test", eventType: "death" })}
+                    type="button"
+                  >
+                    테스트 멘트
+                  </button>
+                ) : null}
               </div>
               <div className="query-box">
                 <input
@@ -765,43 +842,11 @@ export const App = () => {
                   질문 보내기
                 </button>
               </div>
-            </SectionCard>
-
-            <SectionCard title="최근 상태" eyebrow="Recent Activity">
-              <div className="list-stack">
-                <div className="info-panel">
-                  <p className="info-panel__primary">
-                    마지막 발화: {snapshot.recentUtterances[0]?.text ?? "아직 없음"}
-                  </p>
-                  <p className="field__description">
-                    마지막 이벤트:{" "}
-                    {snapshot.recentEvents[0]
-                      ? EVENT_LABELS[snapshot.recentEvents[0].type]
-                      : "아직 없음"}
-                  </p>
-                </div>
-                <div className="log-list">
-                  {snapshot.logs.slice(0, 6).map((log) => (
-                    <article key={log.id} className={`log-entry log-entry--${log.level}`}>
-                      <header>
-                        <strong>{log.scope}</strong>
-                        <small>{formatClockTime(log.timestamp)}</small>
-                      </header>
-                      <p>{log.message}</p>
-                    </article>
-                  ))}
-                  {snapshot.logs.length === 0 ? (
-                    <p className="muted">아직 로그가 없습니다.</p>
-                  ) : null}
-                </div>
-                <div className="button-row">
-                  <button className="button" onClick={() => setSimpleView(false)} type="button">
-                    고급 설정 보기
-                  </button>
-                  <button className="button" onClick={() => setActiveTab("logs")} type="button">
-                    전체 로그 열기
-                  </button>
-                </div>
+              <div className="info-panel">
+                <p className="info-panel__primary">최근 시스템 로그</p>
+                <p className="field__description">
+                  {snapshot.logs[0]?.message ?? "아직 로그가 없습니다."}
+                </p>
               </div>
             </SectionCard>
           </div>
@@ -866,13 +911,6 @@ export const App = () => {
               <div className="button-row">
                 <button
                   className="button"
-                  onClick={() => void sendCommand({ type: "utterance/test", eventType: "death" })}
-                  type="button"
-                >
-                  데스 멘트 테스트
-                </button>
-                <button
-                  className="button"
                   onClick={() =>
                     void sendCommand({ type: "speech/simulate-wake-word", word: settings.wakeWords[0] })
                   }
@@ -880,22 +918,35 @@ export const App = () => {
                 >
                   웨이크워드 시뮬레이션
                 </button>
-                <button
-                  className="button"
-                  onClick={() => void sendCommand({ type: "event/inject", eventType: "soloOverextend" })}
-                  type="button"
-                >
-                  무리 진입 이벤트
-                </button>
-                <button
-                  className="button"
-                  onClick={() =>
-                    void sendCommand({ type: "event/inject", eventType: "missedEasyKill" })
-                  }
-                  type="button"
-                >
-                  킬 놓침 이벤트
-                </button>
+                {settings.developerMode ? (
+                  <button
+                    className="button"
+                    onClick={() => void sendCommand({ type: "utterance/test", eventType: "death" })}
+                    type="button"
+                  >
+                    데스 멘트 테스트
+                  </button>
+                ) : null}
+                {settings.developerMode ? (
+                  <button
+                    className="button"
+                    onClick={() => void sendCommand({ type: "event/inject", eventType: "soloOverextend" })}
+                    type="button"
+                  >
+                    무리 진입 이벤트
+                  </button>
+                ) : null}
+                {settings.developerMode ? (
+                  <button
+                    className="button"
+                    onClick={() =>
+                      void sendCommand({ type: "event/inject", eventType: "missedEasyKill" })
+                    }
+                    type="button"
+                  >
+                    킬 놓침 이벤트
+                  </button>
+                ) : null}
               </div>
               <div className="query-box">
                 <input
@@ -983,7 +1034,7 @@ export const App = () => {
             <SectionCard title="최근 이벤트" eyebrow="Analysis Feed">
               <div className="list-stack">
                 {snapshot.recentEvents.length === 0 ? (
-                  <p className="muted">아직 이벤트가 없습니다. 분석을 시작하거나 Mock 이벤트를 넣어보세요.</p>
+                  <p className="muted">아직 이벤트가 없습니다. 실제 게임 감지 후 분석을 시작해보세요.</p>
                 ) : (
                   snapshot.recentEvents.slice(0, 4).map((event) => (
                     <article key={event.id} className="feed-card">
@@ -1260,10 +1311,18 @@ export const App = () => {
         {!simpleView && activeTab === "speech" ? (
           <div className="section-grid">
             <SectionCard title="음성 설정" eyebrow="Speech Runtime">
+              <div className="info-panel">
+                <p className="info-panel__primary">
+                  현재 STT: {sttProviderLabel} · 마이크 {snapshot.microphoneStatus}
+                </p>
+                <p className="field__description">
+                  Windows에서는 앱이 기본 마이크로 바로 듣습니다. 아래 브라우저 음성은 native STT가 안 될 때만 쓰는 보조 수단입니다.
+                </p>
+              </div>
               <div className="field-grid">
                 {liveVoice.devices.length > 0 ? (
                   <SelectField
-                    description="Web Speech API는 기본 시스템 마이크를 우선 사용합니다."
+                    description="브라우저 베타 음성 인식에서 참고하는 장치 목록"
                     label="마이크 장치"
                     onChange={(value) => setSetting("microphoneDeviceId", value)}
                     options={[
@@ -1363,7 +1422,7 @@ export const App = () => {
               </div>
             </SectionCard>
 
-            <SectionCard title="라이브 음성 인식 베타" eyebrow="Web Speech Beta">
+            <SectionCard title="브라우저 음성 보조" eyebrow="Web Speech Fallback">
               <div className="info-panel">
                 <p className="info-panel__primary">
                   {liveVoice.supported ? "사용 가능" : "이 환경에서는 지원 안 됨"}

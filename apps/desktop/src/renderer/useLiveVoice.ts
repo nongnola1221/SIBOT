@@ -37,17 +37,19 @@ export const useLiveVoice = () => {
   const [error, setError] = useState("");
   const [devices, setDevices] = useState<VoiceDeviceOption[]>([]);
 
-  const refreshDevices = async () => {
+  const refreshDevices = async (requestPermission = true) => {
     if (!navigator.mediaDevices?.enumerateDevices) {
       setDevices([]);
       return;
     }
 
-    try {
-      const probeStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      probeStream.getTracks().forEach((track) => track.stop());
-    } catch {
-      // continue with whatever labels are already available
+    if (requestPermission) {
+      try {
+        const probeStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        probeStream.getTracks().forEach((track) => track.stop());
+      } catch {
+        // continue with whatever labels are already available
+      }
     }
 
     try {
@@ -67,7 +69,7 @@ export const useLiveVoice = () => {
 
   useEffect(() => {
     setSupported(Boolean(resolveRecognition()));
-    void refreshDevices();
+    void refreshDevices(false);
   }, []);
 
   useEffect(() => {
@@ -161,4 +163,3 @@ export const useLiveVoice = () => {
     stopListening
   };
 };
-

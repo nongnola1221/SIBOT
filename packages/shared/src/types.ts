@@ -230,6 +230,8 @@ export interface RuntimeSnapshot {
   logs: LogEntry[];
   microphoneStatus: MicrophoneStatus;
   ttsStatus: TtsStatus;
+  sttProviderId: string;
+  lastTranscript: string | null;
   currentMode: SibotMode;
   isOverlayVisible: boolean;
   autoListenOpen: boolean;

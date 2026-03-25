@@ -26,7 +26,8 @@ import {
   type STTProvider,
   type TTSProvider,
   type WakeWordProvider,
-  SystemTTSProvider
+  SystemTTSProvider,
+  WindowsSystemSTTProvider
 } from "@sibot/speech";
 import { MockAnalysisEngine } from "../analysis/mockAnalyzer";
 import { ConversationMemory } from "./memory";
@@ -67,7 +68,9 @@ export class SibotRuntime {
   constructor(initialSettings: UserSettings, dependencies: RuntimeDependencies = {}) {
     this.detector = dependencies.detector ?? new GameDetectionService();
     this.tts = dependencies.tts ?? new SystemTTSProvider();
-    this.stt = dependencies.stt ?? new MockSTTProvider();
+    this.stt =
+      dependencies.stt ??
+      (process.platform === "win32" ? new WindowsSystemSTTProvider() : new MockSTTProvider());
     this.wakeWord = dependencies.wakeWord ?? new MockWakeWordProvider();
     this.persistSettings = dependencies.persistSettings;
 
@@ -85,9 +88,35 @@ export class SibotRuntime {
       void this.onWakeWord(word);
     });
 
-    await this.stt.start();
-    await this.wakeWord.configure(this.snapshot.settings.wakeWords);
-    await this.wakeWord.start();
+    try {
+      await this.stt.start();
+      this.snapshot = {
+        ...this.snapshot,
+        microphoneStatus: "ready"
+      };
+      this.log("info", "speech", "Speech recognition initialized", {
+        provider: this.stt.id
+      });
+    } catch (error) {
+      this.snapshot = {
+        ...this.snapshot,
+        microphoneStatus: "disabled"
+      };
+      this.log("error", "speech", "Speech recognition initialization failed", {
+        provider: this.stt.id,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+
+    try {
+      await this.wakeWord.configure(this.snapshot.settings.wakeWords);
+      await this.wakeWord.start();
+    } catch (error) {
+      this.log("warn", "speech", "Wake word runtime unavailable", {
+        provider: this.wakeWord.id,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
 
     this.setSpeechBaseline();
     this.startDetectionPolling();
@@ -297,7 +326,8 @@ export class SibotRuntime {
     this.snapshot = {
       ...this.snapshot,
       recentTurns: this.memory.getTurns(),
-      appStatus: "conversing"
+      appStatus: "conversing",
+      lastTranscript: trimmed
     };
 
     await this.publishUtterance(answer);
@@ -330,6 +360,12 @@ export class SibotRuntime {
     this.log("debug", "speech", "Transcript received", {
       text: trimmed
     });
+
+    this.snapshot = {
+      ...this.snapshot,
+      lastTranscript: trimmed
+    };
+    this.emitSnapshot();
 
     const matchedWakeWord = this.matchWakeWord(trimmed);
 
@@ -439,8 +475,10 @@ export class SibotRuntime {
       recentUtterances: [],
       recentTurns: [],
       logs: [],
-      microphoneStatus: "ready",
+      microphoneStatus: "unknown",
       ttsStatus: settings.ttsEnabled ? "ready" : "off",
+      sttProviderId: this.stt.id,
+      lastTranscript: null,
       currentMode: settings.mode,
       isOverlayVisible: settings.overlayEnabled,
       autoListenOpen: false,
