@@ -324,6 +324,32 @@ export const App = () => {
     [snapshot?.settings.selectedGameProfile]
   );
 
+  useEffect(() => {
+    if (!snapshot) {
+      return;
+    }
+
+    const settings = snapshot.settings;
+
+    if (
+      settings.captureAnalysisEnabled &&
+      settings.captureSourceId &&
+      !captureAnalysis.active
+    ) {
+      void captureAnalysis.start(settings.captureSourceId, settings.captureSampleIntervalMs);
+    }
+
+    if (!settings.captureAnalysisEnabled && captureAnalysis.active) {
+      captureAnalysis.stop();
+    }
+  }, [
+    captureAnalysis,
+    snapshot?.settings.captureAnalysisEnabled,
+    snapshot?.settings.captureSampleIntervalMs,
+    snapshot?.settings.captureSourceId,
+    snapshot
+  ]);
+
   if (!snapshot) {
     return (
       <RuntimeFallback
@@ -414,30 +440,6 @@ export const App = () => {
     captureAnalysis.stop();
     void updateSettings({ captureAnalysisEnabled: false });
   };
-
-  useEffect(() => {
-    if (!snapshot) {
-      return;
-    }
-
-    if (
-      settings.captureAnalysisEnabled &&
-      settings.captureSourceId &&
-      !captureAnalysis.active
-    ) {
-      void captureAnalysis.start(settings.captureSourceId, settings.captureSampleIntervalMs);
-    }
-
-    if (!settings.captureAnalysisEnabled && captureAnalysis.active) {
-      captureAnalysis.stop();
-    }
-  }, [
-    captureAnalysis,
-    settings.captureAnalysisEnabled,
-    settings.captureSampleIntervalMs,
-    settings.captureSourceId,
-    snapshot
-  ]);
 
   return (
     <div className="app-shell">
