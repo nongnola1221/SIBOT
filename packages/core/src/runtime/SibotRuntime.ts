@@ -178,6 +178,8 @@ export class SibotRuntime {
         return this.injectMockEvent(command.eventType);
       case "utterance/test":
         return this.testUtterance(command.eventType);
+      case "speech/test-tts":
+        return this.testTts(command.text);
       case "speech/simulate-wake-word":
         return this.onWakeWord(command.word ?? this.snapshot.settings.wakeWords[0]);
       case "speech/process-transcript":
@@ -364,6 +366,63 @@ export class SibotRuntime {
     return event;
   }
 
+  async testTts(text?: string) {
+    const utterance: Utterance = {
+      id: createId("utterance"),
+      type: "debug",
+      text:
+        text?.trim() ||
+        `${this.snapshot.settings.aiName} TTS 테스트 중. 지금 이 목소리가 들리면 정상입니다.`,
+      mode: this.snapshot.settings.mode,
+      createdAt: Date.now(),
+      profanityUsed: false,
+      priority: 0.1,
+      tags: ["tts-test"],
+      source: "debug"
+    };
+
+    this.memory.addUtterance(utterance);
+    this.snapshot = {
+      ...this.snapshot,
+      recentUtterances: this.memory.getUtterances(),
+      overlayStatus: this.snapshot.settings.overlayEnabled ? "visible" : "hidden",
+      isOverlayVisible: this.snapshot.settings.overlayEnabled,
+      ttsStatus: "speaking"
+    };
+    this.emitSnapshot();
+
+    this.log("info", "speech", "TTS test requested", {
+      provider: this.tts.id,
+      platform: process.platform,
+      enabledInSettings: this.snapshot.settings.ttsEnabled
+    });
+
+    try {
+      await this.tts.speak(utterance, {
+        volume: this.snapshot.settings.ttsVolume,
+        rate: this.snapshot.settings.ttsRate,
+        mode: utterance.mode
+      });
+
+      this.log("info", "speech", "TTS test completed", {
+        provider: this.tts.id
+      });
+      return true;
+    } catch (error) {
+      this.log("error", "speech", "TTS test failed", {
+        provider: this.tts.id,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      return false;
+    } finally {
+      this.snapshot = {
+        ...this.snapshot,
+        ttsStatus: this.snapshot.settings.ttsEnabled ? "ready" : "off"
+      };
+      this.emitSnapshot();
+    }
+  }
+
   private createInitialSnapshot(settings: UserSettings): RuntimeSnapshot {
     return {
       settings,
@@ -484,17 +543,25 @@ export class SibotRuntime {
     };
 
     if (this.snapshot.settings.ttsEnabled) {
-      void this.tts.speak(utterance, {
-        volume: this.snapshot.settings.ttsVolume,
-        rate: this.snapshot.settings.ttsRate,
-        mode: utterance.mode
-      }).finally(() => {
-        this.snapshot = {
-          ...this.snapshot,
-          ttsStatus: this.snapshot.settings.ttsEnabled ? "ready" : "off"
-        };
-        this.emitSnapshot();
-      });
+      void this.tts
+        .speak(utterance, {
+          volume: this.snapshot.settings.ttsVolume,
+          rate: this.snapshot.settings.ttsRate,
+          mode: utterance.mode
+        })
+        .catch((error) => {
+          this.log("error", "speech", "TTS playback failed", {
+            provider: this.tts.id,
+            error: error instanceof Error ? error.message : String(error)
+          });
+        })
+        .finally(() => {
+          this.snapshot = {
+            ...this.snapshot,
+            ttsStatus: this.snapshot.settings.ttsEnabled ? "ready" : "off"
+          };
+          this.emitSnapshot();
+        });
     }
 
     if (this.snapshot.settings.autoListenAfterSpeak) {

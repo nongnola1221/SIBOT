@@ -16,21 +16,17 @@ export class SystemTTSProvider implements TTSProvider {
       return;
     }
 
-    try {
-      if (process.platform === "win32") {
-        await this.speakWithWindows(text, options);
-        return;
-      }
-
-      if (process.platform === "darwin") {
-        await this.speakWithMac(text, options);
-        return;
-      }
-
-      await this.speakWithLinux(text);
-    } catch {
+    if (process.platform === "win32") {
+      await this.speakWithWindows(text, options);
       return;
     }
+
+    if (process.platform === "darwin") {
+      await this.speakWithMac(text, options);
+      return;
+    }
+
+    await this.speakWithLinux(text);
   }
 
   async stop() {
@@ -66,23 +62,27 @@ export class SystemTTSProvider implements TTSProvider {
   }
 
   private runProcess(command: string, args: string[]) {
-    return new Promise<void>((resolve) => {
+    return new Promise<void>((resolve, reject) => {
       const child = spawn(command, args, {
         stdio: ["ignore", "ignore", "ignore"]
       });
 
       this.currentChild = child;
 
-      child.once("error", () => {
+      child.once("error", (error) => {
         this.currentChild = null;
-        resolve();
+        reject(error);
       });
 
-      child.once("exit", () => {
+      child.once("exit", (code) => {
         this.currentChild = null;
+        if (typeof code === "number" && code !== 0) {
+          reject(new Error(`TTS process exited with code ${code}`));
+          return;
+        }
+
         resolve();
       });
     });
   }
 }
-

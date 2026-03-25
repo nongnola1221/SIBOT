@@ -27,6 +27,12 @@ const tabs: Array<{ id: TabId; label: string; hint: string }> = [
   { id: "logs", label: "로그/디버그", hint: "최근 로그와 상태 JSON" }
 ];
 
+const DETECTION_SOURCE_LABELS = {
+  process: "실게임 감지",
+  mock: "Mock 감지",
+  inactive: "감지 없음"
+} as const;
+
 const ToggleField = ({
   label,
   description,
@@ -315,6 +321,7 @@ export const App = () => {
   const liveVoice = useLiveVoice();
   const captureAnalysis = useCaptureAnalysis();
   const [activeTab, setActiveTab] = useState<TabId>("dashboard");
+  const [simpleView, setSimpleView] = useState(true);
   const [questionInput, setQuestionInput] = useState("");
   const [wakeWordDraft, setWakeWordDraft] = useState("");
   const [obsCopied, setObsCopied] = useState(false);
@@ -367,6 +374,14 @@ export const App = () => {
 
   const settings = snapshot.settings;
   const obsOverlayUrl = `http://127.0.0.1:${settings.obsOverlayPort}/overlay`;
+  const detectionSource = snapshot.detectedGame?.source ?? "inactive";
+  const detectionSourceLabel = DETECTION_SOURCE_LABELS[detectionSource];
+  const detectionHelpText =
+    detectionSource === "process"
+      ? "현재는 실제 실행 중인 게임 프로세스와 창 기준으로 감지된 상태입니다."
+      : detectionSource === "mock"
+        ? "현재는 실게임 미감지 상태라 mock fallback으로 들어가 있습니다. 실제 감지만 쓰려면 디버그 감지를 끄면 됩니다."
+        : "지원 게임 프로세스나 창 제목이 아직 잡히지 않았습니다. 게임 실행 후 감지 새로고침을 눌러보세요.";
   const showUpdateBanner = ["update-available", "downloading", "downloaded", "installing"].includes(
     updateStatus?.phase ?? ""
   );
@@ -470,19 +485,44 @@ export const App = () => {
           ) : null}
         </div>
 
-        <nav className="tab-nav">
-          {tabs.map((tab) => (
+        <div className="info-panel">
+          <p className="info-panel__primary">{simpleView ? "간단 모드" : "고급 보기"}</p>
+          <p className="field__description">
+            간단 모드는 감지 확인, TTS 테스트, 분석 시작만 먼저 보여줍니다.
+          </p>
+          <div className="button-row">
             <button
-              key={tab.id}
-              className={tab.id === activeTab ? "tab-nav__item is-active" : "tab-nav__item"}
-              onClick={() => setActiveTab(tab.id)}
+              className={simpleView ? "button is-active" : "button"}
+              onClick={() => setSimpleView(true)}
               type="button"
             >
-              <span>{tab.label}</span>
-              <small>{tab.hint}</small>
+              간단
             </button>
-          ))}
-        </nav>
+            <button
+              className={!simpleView ? "button is-active" : "button"}
+              onClick={() => setSimpleView(false)}
+              type="button"
+            >
+              고급
+            </button>
+          </div>
+        </div>
+
+        {!simpleView ? (
+          <nav className="tab-nav">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                className={tab.id === activeTab ? "tab-nav__item is-active" : "tab-nav__item"}
+                onClick={() => setActiveTab(tab.id)}
+                type="button"
+              >
+                <span>{tab.label}</span>
+                <small>{tab.hint}</small>
+              </button>
+            ))}
+          </nav>
+        ) : null}
       </aside>
 
       <main className="main-panel">
@@ -492,6 +532,7 @@ export const App = () => {
             <h2>
               {snapshot.detectedGame?.profile?.name ?? "지원 게임 없음"}
               <span>{snapshot.detectedGame?.activeWindowTitle ?? "활성 창 감지 대기"}</span>
+              <span>{detectionSourceLabel}</span>
             </h2>
           </div>
 
@@ -514,17 +555,24 @@ export const App = () => {
             >
               감지 새로고침
             </button>
+            {!simpleView ? (
+              <button
+                className="button"
+                onClick={() => void sendCommand({ type: "event/inject" })}
+                type="button"
+              >
+                Mock 이벤트
+              </button>
+            ) : null}
             <button
-              className="button"
-              onClick={() => void sendCommand({ type: "event/inject" })}
+              className={simpleView ? "button" : "button is-active"}
+              onClick={() => setSimpleView((current) => !current)}
               type="button"
             >
-              Mock 이벤트
+              {simpleView ? "고급 설정 열기" : "간단 모드"}
             </button>
           </div>
         </header>
-
-        <StatusGrid snapshot={snapshot} />
 
         {showUpdateBanner ? (
           <section className="update-banner">
@@ -568,7 +616,207 @@ export const App = () => {
           </section>
         ) : null}
 
-        {activeTab === "dashboard" ? (
+        {simpleView ? (
+          <div className="section-grid section-grid--dashboard">
+            <SectionCard title="1. 게임 감지 확인" eyebrow="Quick Start">
+              <div className="detail-grid">
+                <div>
+                  <span>감지 상태</span>
+                  <strong>{detectionSourceLabel}</strong>
+                </div>
+                <div>
+                  <span>감지 게임</span>
+                  <strong>{snapshot.detectedGame?.profile?.name ?? "없음"}</strong>
+                </div>
+                <div>
+                  <span>프로세스</span>
+                  <strong>{snapshot.detectedGame?.processName ?? "없음"}</strong>
+                </div>
+                <div>
+                  <span>실행 중 지원 게임</span>
+                  <strong>{snapshot.detectedGame?.runningGames.length ?? 0}개</strong>
+                </div>
+              </div>
+              <div className="info-panel">
+                <p className="info-panel__primary">{detectionHelpText}</p>
+                <p className="field__description">
+                  {snapshot.detectedGame?.activeWindowTitle ?? "활성 창 제목 정보 없음"}
+                </p>
+              </div>
+              <div className="button-row">
+                <button
+                  className="button"
+                  onClick={() => void sendCommand({ type: "detection/refresh" })}
+                  type="button"
+                >
+                  감지 새로고침
+                </button>
+                {settings.debugMode ? (
+                  <button
+                    className="button"
+                    onClick={() => setSetting("debugMode", false)}
+                    type="button"
+                  >
+                    Mock 감지 끄기
+                  </button>
+                ) : null}
+              </div>
+            </SectionCard>
+
+            <SectionCard title="2. TTS 테스트" eyebrow="Quick Start">
+              <div className="detail-grid">
+                <div>
+                  <span>TTS 설정</span>
+                  <strong>{settings.ttsEnabled ? "켜짐" : "꺼짐"}</strong>
+                </div>
+                <div>
+                  <span>런타임 상태</span>
+                  <strong>{snapshot.ttsStatus}</strong>
+                </div>
+                <div>
+                  <span>음량</span>
+                  <strong>{Math.round(settings.ttsVolume * 100)}%</strong>
+                </div>
+                <div>
+                  <span>속도</span>
+                  <strong>{settings.ttsRate.toFixed(2)}x</strong>
+                </div>
+              </div>
+              <div className="info-panel">
+                <p className="info-panel__primary">
+                  Windows는 시스템 음성으로 재생됩니다. 먼저 여기서 테스트해보면 됩니다.
+                </p>
+                <p className="field__description">
+                  소리가 안 나면 아래 테스트 버튼을 누른 뒤 최근 로그에 `TTS test failed`가 뜨는지
+                  확인하면 됩니다.
+                </p>
+              </div>
+              <div className="button-row">
+                <button
+                  className={settings.ttsEnabled ? "button is-active" : "button"}
+                  onClick={() => setSetting("ttsEnabled", !settings.ttsEnabled)}
+                  type="button"
+                >
+                  {settings.ttsEnabled ? "TTS 끄기" : "TTS 켜기"}
+                </button>
+                <button
+                  className="button button--primary"
+                  onClick={() => void sendCommand({ type: "speech/test-tts" })}
+                  type="button"
+                >
+                  TTS 테스트
+                </button>
+                <button
+                  className="button"
+                  onClick={() => setActiveTab("speech")}
+                  type="button"
+                >
+                  음성 설정 열기
+                </button>
+              </div>
+            </SectionCard>
+
+            <SectionCard title="3. 분석 시작" eyebrow="Quick Start">
+              <div className="info-panel">
+                <p className="info-panel__primary">
+                  {snapshot.analysisStatus === "running"
+                    ? "분석이 돌아가는 중입니다."
+                    : "분석 시작 후 멘트 테스트나 질문 입력으로 바로 동작을 볼 수 있습니다."}
+                </p>
+                <p className="field__description">
+                  실게임 감지가 안 잡혀도 디버그 감지가 켜져 있으면 기본 동작 확인은 가능합니다.
+                </p>
+              </div>
+              <div className="button-row">
+                <button
+                  className="button button--primary"
+                  onClick={() =>
+                    void sendCommand({
+                      type: snapshot.analysisStatus === "running" ? "analysis/stop" : "analysis/start"
+                    })
+                  }
+                  type="button"
+                >
+                  {snapshot.analysisStatus === "running" ? "분석 중지" : "분석 시작"}
+                </button>
+                <button
+                  className="button"
+                  onClick={() => void sendCommand({ type: "utterance/test", eventType: "death" })}
+                  type="button"
+                >
+                  데스 멘트 테스트
+                </button>
+                <button
+                  className="button"
+                  onClick={() =>
+                    void sendCommand({ type: "speech/simulate-wake-word", word: settings.wakeWords[0] })
+                  }
+                  type="button"
+                >
+                  웨이크워드 테스트
+                </button>
+              </div>
+              <div className="query-box">
+                <input
+                  onChange={(event) => setQuestionInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      submitQuestion();
+                    }
+                  }}
+                  placeholder="예: 왜 내 잘못인데"
+                  type="text"
+                  value={questionInput}
+                />
+                <button className="button" onClick={submitQuestion} type="button">
+                  질문 보내기
+                </button>
+              </div>
+            </SectionCard>
+
+            <SectionCard title="최근 상태" eyebrow="Recent Activity">
+              <div className="list-stack">
+                <div className="info-panel">
+                  <p className="info-panel__primary">
+                    마지막 발화: {snapshot.recentUtterances[0]?.text ?? "아직 없음"}
+                  </p>
+                  <p className="field__description">
+                    마지막 이벤트:{" "}
+                    {snapshot.recentEvents[0]
+                      ? EVENT_LABELS[snapshot.recentEvents[0].type]
+                      : "아직 없음"}
+                  </p>
+                </div>
+                <div className="log-list">
+                  {snapshot.logs.slice(0, 6).map((log) => (
+                    <article key={log.id} className={`log-entry log-entry--${log.level}`}>
+                      <header>
+                        <strong>{log.scope}</strong>
+                        <small>{formatClockTime(log.timestamp)}</small>
+                      </header>
+                      <p>{log.message}</p>
+                    </article>
+                  ))}
+                  {snapshot.logs.length === 0 ? (
+                    <p className="muted">아직 로그가 없습니다.</p>
+                  ) : null}
+                </div>
+                <div className="button-row">
+                  <button className="button" onClick={() => setSimpleView(false)} type="button">
+                    고급 설정 보기
+                  </button>
+                  <button className="button" onClick={() => setActiveTab("logs")} type="button">
+                    전체 로그 열기
+                  </button>
+                </div>
+              </div>
+            </SectionCard>
+          </div>
+        ) : null}
+
+        {!simpleView ? <StatusGrid snapshot={snapshot} /> : null}
+
+        {!simpleView && activeTab === "dashboard" ? (
           <div className="section-grid section-grid--dashboard">
             <SectionCard title="빠른 토글" eyebrow="Quick Control">
               <div className="quick-toggle-grid">
@@ -778,7 +1026,7 @@ export const App = () => {
           </div>
         ) : null}
 
-        {activeTab === "character" ? (
+        {!simpleView && activeTab === "character" ? (
           <div className="section-grid">
             <SectionCard title="캐릭터 기본값" eyebrow="Persona Core">
               <div className="field-grid">
@@ -867,7 +1115,7 @@ export const App = () => {
           </div>
         ) : null}
 
-        {activeTab === "overlay" ? (
+        {!simpleView && activeTab === "overlay" ? (
           <div className="section-grid">
             <SectionCard title="오버레이 미리보기" eyebrow="App Overlay Preview">
               <OverlayPreview snapshot={snapshot} />
@@ -1016,7 +1264,7 @@ export const App = () => {
           </div>
         ) : null}
 
-        {activeTab === "speech" ? (
+        {!simpleView && activeTab === "speech" ? (
           <div className="section-grid">
             <SectionCard title="음성 설정" eyebrow="Speech Runtime">
               <div className="field-grid">
@@ -1163,7 +1411,7 @@ export const App = () => {
           </div>
         ) : null}
 
-        {activeTab === "game" ? (
+        {!simpleView && activeTab === "game" ? (
           <div className="section-grid">
             <SectionCard title="게임 감지" eyebrow="Detection & Rule Target">
               <div className="field-grid">
@@ -1352,7 +1600,7 @@ export const App = () => {
           </div>
         ) : null}
 
-        {activeTab === "logs" ? (
+        {!simpleView && activeTab === "logs" ? (
           <div className="section-grid">
             <SectionCard title="시스템 상태" eyebrow="System Runtime">
               <div className="detail-grid">

@@ -253,6 +253,10 @@ select {
   gap: 12px;
 }
 
+.hero-panel__actions {
+  flex-wrap: wrap;
+}
+
 .button-row {
   flex-wrap: wrap;
 }

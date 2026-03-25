@@ -246,6 +246,7 @@ export type RuntimeCommand =
   | { type: "detection/refresh" }
   | { type: "event/inject"; eventType?: AnalysisEventType }
   | { type: "utterance/test"; eventType?: AnalysisEventType }
+  | { type: "speech/test-tts"; text?: string }
   | { type: "speech/simulate-wake-word"; word?: string }
   | { type: "speech/process-transcript"; text: string }
   | { type: "speech/submit-query"; text: string };
